@@ -1,10 +1,19 @@
-// import testCode from './testCode.min.js';
-// import testCode from './testCode';
+// reproduce
 
-// 复现方式 1
 const iframe = document.createElement('iframe');
 document.body.appendChild(iframe);
 const fakeWindow = iframe.contentWindow;
+
+const fakeWindowProxyToFixRegExpBug = new Proxy(fakeWindow, {
+
+  get(target, p, receiver) {
+    if (p === 'RegExp') {
+      // fix RegExp.$n bug
+      return RegExp;
+    }
+    return Reflect.get(target, p, receiver);
+  }
+})
 
 const code = `
     const r = /^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/
@@ -15,7 +24,7 @@ const code = `
     return RegExp.$1;
 `;
 
-const evalScript = (code, fakeWindow) => {
+const evalScriptSandbox = (code, fakeWindow) => {
   const resolver = new Function(`
     return function(window) {
       with(window) {
@@ -35,13 +44,11 @@ const evalScript = (code, fakeWindow) => {
 };
 
 
-const correctResult = evalScript(code, window);
+const correctResult = evalScriptSandbox(code, window);
 console.log("correctResult", correctResult);
 
+const correctResult2 = evalScriptSandbox(code, fakeWindowProxyToFixRegExpBug);
+console.log("correctResult2", correctResult);
 
-const wrongResult = evalScript(code, fakeWindow);
+const wrongResult = evalScriptSandbox(code, fakeWindow);
 console.log("wrongResult", wrongResult);
-
-
-// console.log('testcode   ------- begin');
-// testCode()
