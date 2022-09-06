@@ -10,6 +10,15 @@ evalScriptInSandbox(code);
 
 正常情况下，`evalScriptInSandbox(code)` 应该返回 `'2022'`,但是执行发现只会返回空字符串，最后发现是 RegExp 的执行上下文问题。
 
+## 复现步骤:
+```bash
+$ npm i
+$ npm run reproduce
+```
+
+## 原因分析
+起初怀疑是 `core-js` 的 polyfill 导致原生 `RegExp` 对象的行为异常，经过测试全局引入 `import 'core-js/full'`，也没有复现问题，所以排除了core-js的影响。
+
 因为沙箱的实现类似于这种：
 ```javascript
 const evalScriptSandbox = (code, fakeWindow) => {
@@ -34,12 +43,20 @@ const evalScriptSandbox = (code, fakeWindow) => {
 };
 ```
 
-解决方式就是访问`fakeWindow`中的 `RegExp` 对象时，需要返回宿主环境的 `RegExp`，这和浏览器的内部实现有关系，暂时没发现其他的解决方式。
-
-## Reproduce Step :
-```bash
-$ npm i
-$ npm run start
+## 解决方式
+所以最终解决方式就是访问`fakeWindow`中的 `RegExp` 对象时，需要返回宿主环境的 `RegExp`，即：
+```javascript
+const fakeWindowProxyToFixRegExpBug = new Proxy(fakeWindow, {
+  get(target, p, receiver) {
+    // to reproduce bug
+--    // return target[p];
+++    if (p === "RegExp") {
+++      // fix RegExp.$n bug
+++      return RegExp;
+    }
+    return target[p];
+  },
+});
 ```
 
 ## ⚠️
